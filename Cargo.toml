@@ -3,4 +3,22 @@ name = "zero2prod"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "zero2prod"
+
 [dependencies]
+actix-web = "4"
+chrono = "0.4.38"
+config = "0.14.0"
+diesel = {version = "2.2.3", features = ["chrono", "postgres", "uuid"]}
+diesel-async = { version = "0.5.0", features = ["postgres"] } 
+serde = { version = "1.0.208", features = ["derive"]}
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = "1.10.0"
+
+[dev-dependencies]
+reqwest = "0.12.5"
