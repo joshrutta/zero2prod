@@ -2,6 +2,7 @@
 use actix_web::{web, Responder, HttpResponse};
 use diesel_async::AsyncPgConnection;
 use crate::models::create_subscription;
+use diesel_async::pooled_connection::bb8::Pool;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -11,9 +12,9 @@ pub struct FormData {
 
 pub async fn subscribe(
     form: web::Form<FormData>,
-    connection: web::Data<AsyncPgConnection>,
+    connection_pool: web::Data<Pool<AsyncPgConnection>>,
 ) -> impl Responder {
-    let connection = &mut connection.clone();
-    create_subscription(connection, &form.email, &form.name);
+    let connection_pool = connection_pool.get_ref();
+    create_subscription(connection_pool, &form.email, &form.name).await;
     HttpResponse::Ok()
 }

@@ -6,6 +6,7 @@
 
 use diesel::prelude::{Insertable, Queryable};
 use diesel::{Selectable, SelectableHelper};
+use diesel_async::pooled_connection::{AsyncDieselConnectionManager, bb8::{Pool, PooledConnection}};
 use diesel_async::{RunQueryDsl, AsyncPgConnection};
 use uuid::Uuid;
 use chrono::DateTime;
@@ -25,17 +26,21 @@ pub struct Subscription {
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::subscriptions)]
 pub struct NewSubscription<'a> {
+    pub id: &'a Uuid,
     pub email: &'a str,
     pub name: &'a str,
+    pub subscribed_at: &'a DateTime<Utc>,
 }
 
-pub async fn create_subscription(connection: &mut AsyncPgConnection, email: &str, name: &str) -> Subscription {
-    let new_subscription = NewSubscription { email, name };
+pub async fn create_subscription(connection_pool: &Pool<AsyncPgConnection>, email: &str, name: &str) {
+    let id = &Uuid::new_v4();
+    let new_subscription = NewSubscription { id, email, name, subscribed_at: &Utc::now() };
+    let mut connection = connection_pool.get().await.unwrap();
 
-    diesel::insert_into(subscriptions::table)
+    let subscription = diesel::insert_into(subscriptions::table)
         .values(&new_subscription)
         .returning(Subscription::as_returning())
-        .get_result(connection)
+        .get_result(&mut connection)
         .await
-        .expect("Error saving new subcription")
+        .expect("Error saving new subcription");
 }
