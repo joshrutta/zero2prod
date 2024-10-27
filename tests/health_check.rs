@@ -1,17 +1,29 @@
 use std::net::TcpListener;
 
 use diesel::prelude::*;
-use diesel_async::pooled_connection::bb8::{Pool, PooledConnection};
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use bb8::CustomizeConnection;
+use diesel_async::pooled_connection::bb8::Pool;
+use diesel_async::pooled_connection::{PoolError, AsyncDieselConnectionManager};
 use zero2prod::{configuration::get_configuration, startup::run};
 use reqwest;
-use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use zero2prod::models::Subscription;
 use zero2prod::schema::subscriptions::dsl::*;
+// use diesel_migrations::{embed_migrations,EmbeddedMigrations};
 
 pub struct TestApp {
     pub address: String,
     pub db_pool: Pool<AsyncPgConnection>
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TestCustomizer;
+
+impl<C: Connection> CustomizeConnection<C, crate::diesel_async::pooled_connection::bb8::PoolError> for TestCustomizer {
+    fn on_acquire(&self, conn: &mut C) -> Result<(), PoolError> {
+        conn.begin_test_transaction()
+            .map_err(crate::diesel_async::pooled_connection::bb8::PoolError)
+    }
 }
 
 #[tokio::test]
@@ -36,13 +48,6 @@ async fn health_check_works() {
 async fn subscribe_returns_200_for_valid_form_data() {
     // Arrange
     let app = spawn_app().await;
-    let configuration = get_configuration().expect("Failed to read configuration");
-    let connection_string = configuration.database.connection_string();
-    // create an async connection
-    let mut connection = AsyncPgConnection::establish(&connection_string)
-        .await
-        .expect("Failed to connect to database");
-
     let client = reqwest::Client::new();
 
     // Act
@@ -110,11 +115,16 @@ async fn spawn_app() -> TestApp {
         .expect("Failed to bind to random port");
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);
+    // const migrations: EmbeddedMigrations = embed_migrations!();
 
     let configuration = get_configuration().expect("Failed to read configuration.");
-    let database_url = configuration.database.connection_string();
+    let database_url = configuration.database.connection_string_without_db();
     let connection_manager = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(database_url);
-    let db_pool = Pool::builder().build(connection_manager).await.unwrap();
+    let db_pool = Pool::builder()
+        .max_size(1)
+        .connection_customizer(Box::new(TestCustomizer))
+        .build(connection_manager)
+        .await.unwrap();
     
     let server = run(listener, db_pool.clone()).expect("Failed to bind address");
     tokio::spawn(server);
@@ -123,3 +133,25 @@ async fn spawn_app() -> TestApp {
         db_pool: db_pool.clone(),
     }
 }
+
+// pub fn run_db_migration(
+//     conn: &mut AsyncPgConnection,
+// ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+//     // Check DB connection!
+//     match conn.ping() {
+//         Ok(_) => {}
+//         Err(e) => {
+//             eprint!("[run_db_migration]: Error connecting to database: {}", e);
+//             return Err(Box::new(e));
+//         }
+//     }
+    
+//     // Run all pending migrations.
+//     match conn.run_pending_migrations(MIGRATIONS) {
+//         Ok(_) => Ok(()),
+//         Err(e) => {
+//             eprint!("[run_db_migration]: Error migrating database: {}", e);
+//             Err(e)
+//         }
+//     }
+// }
