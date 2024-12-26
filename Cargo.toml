@@ -20,5 +20,6 @@ serde = { version = "1.0.208", features = ["derive"]}
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 uuid = { version = "1.10.0", features =["v4"] }
 
+
 [dev-dependencies]
 reqwest = "0.12.5"

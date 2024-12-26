@@ -1,19 +1,20 @@
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use zero2prod::startup::run;
-use zero2prod::configuration::get_configuration;
+use secrecy::ExposeSecret;
+use sqlx::PgPool;
+use zero2prod::{configuration::get_configuration, startup::run};
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
 use std::net::TcpListener;
-use diesel_async::pooled_connection::bb8::Pool;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
+    let subscriber = get_subscriber("zero2prod".into(), "info".into(), std::io::stdout);
+    init_subscriber(subscriber);
     // Panic if we can't read configuration
     let configuration = get_configuration().expect("Failed to read configuration.");
-    let database_url = configuration.database.connection_string();
-    let connection_manager = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(database_url);
-    let pool = Pool::builder().build(connection_manager).await.unwrap();
-    
-    // getting port from settings now!
+    let connection_pool = PgPool::connect_lazy(&configuration.database.connection_string().expose_secret())
+        .await
+        .expect("Failed to connect to Postgres.");
+    // getting port from settings
     let address = format!("127.0.0.1:{}", configuration.application_port);
-    let listener = TcpListener::bind(address)?;
-    run(listener, pool)?.await
+    let listener: TcpListener = TcpListener::bind(address).expect("Failed to bind to random port");
+    run(listener, connection_pool)?.await
 }
