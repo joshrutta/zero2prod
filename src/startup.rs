@@ -4,7 +4,7 @@ use actix_web::dev::Server;
 use sqlx::PgPool;
 use tracing_actix_web::TracingLogger;
 use crate::routes::{health_check, subscribe};
-use crate::email_client::{self, EmailClient};
+use crate::email_client::EmailClient;
 
 
 pub fn run(
