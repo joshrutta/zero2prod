@@ -42,32 +42,10 @@ pub async fn subscribe(
         return HttpResponse::InternalServerError().finish();
     }
 
-    let confirmation_link = "https://there-is-no-such-domain.com/subscriptions/confirm";
-    // Send a (useless) email to the new subscriber.
-    // We are ignoring the email delivery errors for now
-    if email_client
-        .send_email(
-            new_subscriber.email,
-            "Welcome!",
-            &format!(
-                "Welcome to our newsletter!<br />\
-                Click <a href=\"{}\">here</a> to confirm your subscription.",
-                confirmation_link
-            ),
-            &format!(
-                "Welcome to our newsletter!\nVisit {} to confirm your subscription.",
-                confirmation_link
-            ),
-        ).await.is_err() {
-            return HttpResponse::InternalServerError().finish();
-        }
+    if send_confirmation_email(&email_client, new_subscriber).await.is_err() {
+        return HttpResponse::InternalServerError().finish();
+    }
     HttpResponse::Ok().finish()
-
-    // match insert_subscriber(&pool, &new_subscriber).await
-    // {
-    //     Ok(_) => HttpResponse::Ok().finish(),
-    //     Err(_) => HttpResponse::InternalServerError().finish()
-    // }
 }
 
 #[tracing::instrument(
@@ -96,4 +74,24 @@ pub async fn insert_subscriber(
         e
     })?;
     Ok(())
+}
+
+pub async fn send_confirmation_email(email_client: &EmailClient, new_subscriber: NewSubscriber) -> Result<(), reqwest::Error> {
+    let confirmation_link = "https://there-is-no-such-domain.com/subscriptions/confirm";
+    let html_body= &format!("Welcome to our newsletter!<br />\
+        Click <a href=\"{}\">here</a> to confirm your subscription.",
+        confirmation_link
+    );
+    let plain_body = &format!(
+                "Welcome to our newsletter!\nVisit {} to confirm your subscription.",
+                confirmation_link);
+    // Send a (useless) email to the new subscriber.
+    // We are ignoring the email delivery errors for now
+    email_client
+        .send_email(
+            new_subscriber.email,
+            "Welcome!",
+            &html_body,
+            &plain_body
+        ).await
 }
