@@ -4,7 +4,7 @@ use actix_web::dev::Server;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tracing_actix_web::TracingLogger;
-use crate::routes::{health_check, subscribe};
+use crate::routes::{health_check, subscribe, confirm};
 use crate::email_client::EmailClient;
 use crate::configuration::{DatabaseSettings, Settings};
 
@@ -56,6 +56,7 @@ pub fn run(
             .wrap(TracingLogger::default())
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
+            .route("/subscriptions/confirm", web::get().to(confirm))
             .app_data(pg_pool.clone())
             .app_data(email_client.clone())
     })            
