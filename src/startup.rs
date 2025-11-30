@@ -30,7 +30,11 @@ impl Application {
         let address = format!("{}:{}", configuration.application.host, configuration.application.port);
         let listener: TcpListener = TcpListener::bind(address).expect("Failed to bind to port");
         let port = listener.local_addr().unwrap().port();
-        let server = run(listener, connection_pool, email_client)?;
+        let server = run(listener, 
+            connection_pool, 
+            email_client, 
+            configuration.application.base_url
+        )?;
         Ok(Self { port, server })
     }
 
@@ -43,13 +47,21 @@ impl Application {
     }
 }
 
+// We need to define a wrapper type in order to retrieve the URL
+// in the `subscribe` handler.
+// Retrieval from the context, in actix-web, is type-based: using
+// a raw `String` would expose us to conflicts.
+pub struct ApplicationBaseUrl(pub String);
+
 pub fn run(
     listener: TcpListener,
     pg_pool: PgPool,
-    email_client: EmailClient
+    email_client: EmailClient,
+    base_url: String
 ) -> Result<Server, std::io::Error> {
     let pg_pool = web::Data::new(pg_pool);
     let email_client = web::Data::new(email_client);
+    let base_url = web::Data::new(ApplicationBaseUrl(base_url));
     let server = HttpServer::new( move || {
         App::new()
             // Middlewares are added using the `wrap` method on `App`
@@ -59,6 +71,7 @@ pub fn run(
             .route("/subscriptions/confirm", web::get().to(confirm))
             .app_data(pg_pool.clone())
             .app_data(email_client.clone())
+            .app_data(base_url.clone())
     })            
     .listen(listener)?
     .run();

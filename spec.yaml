@@ -52,6 +52,9 @@ envs:
   - key: APP_DATABASE__DATABASE_NAME
     scope: RUN_TIME
     value: ${newsletter.DATABASE}
+  - key: APP_APPLICATION__BASE_URL
+    scope: RUN_TIME
+    value: ${APP_URL}
 databases:
   - engine: PG
     name: newsletter
