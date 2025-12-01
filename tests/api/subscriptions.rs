@@ -1,4 +1,5 @@
 use crate::helpers::{TestApp, spawn_app};
+use validator::HasLen;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -112,7 +113,7 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
 #[tokio::test]
 async fn subscribe_sends_a_confirmation_email_with_link() {
     // state: RED TEST
-    
+
     // Arrange
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
@@ -129,4 +130,25 @@ async fn subscribe_sends_a_confirmation_email_with_link() {
     let confirmation_links = app.get_confirmation_links(&email_request);
     
     assert_eq!(confirmation_links.html, confirmation_links.plain_text);
+}
+
+#[tokio::test]
+async fn subscribe_a_second_time_sends_a_confirmation_email_with_link() {
+    // state: RED TEST
+    
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let body2 = "name=brandon%20sanderson&email=brandon_sanderson%40gmail.com";
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+    // Act
+    app.post_subscriptions(body.into()).await;
+    app.post_subscriptions(body2.into()).await;
+
+    // Assert
+    assert_eq!(app.email_server.received_requests().await.unwrap().len() as i32, 2);
 }
