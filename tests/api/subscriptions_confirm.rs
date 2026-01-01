@@ -18,6 +18,20 @@ async fn confirmations_without_token_are_rejected_with_a_400() {
 }
 
 #[tokio::test]
+async fn confirmations_with_unauthorized_user_are_rejected_with_a_401() {
+    // Arrange
+    let app = spawn_app().await;
+
+    // Act
+    let response = reqwest::get(&format!{"{}/subscriptions/confirm?subscription_token=asdfghjkl", app.address})
+        .await
+        .unwrap();
+
+    // Assert
+    assert_eq!(response.status().as_u16(), 401);
+}
+
+#[tokio::test]
 async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
     // Arrange
     let app = spawn_app().await;
