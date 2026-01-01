@@ -81,7 +81,7 @@ impl ResponseError for SubscribeError {
     }
 }
 
-fn error_chain_fmt(
+pub fn error_chain_fmt(
     e: &impl std::error::Error,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
@@ -175,11 +175,7 @@ pub async fn insert_subscriber(
         new_subscriber.name.as_ref(),
         Utc::now()
     );
-    transaction.execute(query)
-        .await
-        .map_err(|e| {
-            e
-        })?;
+    transaction.execute(query).await?;
     Ok(subscriber_id)
 }
 
