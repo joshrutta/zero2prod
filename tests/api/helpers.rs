@@ -53,10 +53,11 @@ impl TestApp {
    }
 
    pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
+        let (username, password) = self.test_user().await;
         reqwest::Client::new()
             .post(&format!("{}/newsletters", &self.address))
             // Random credentails
-            .basic_auth(Uuid::new_v4().to_string(), Some(Uuid::new_v4().to_string()))
+            .basic_auth(username, Some(password))
             .json(&body)
             .send()
             .await
@@ -68,31 +69,38 @@ impl TestApp {
     &self,
     email_request: &wiremock::Request
    ) -> ConfirmationLinks {
-    let body: serde_json::Value = serde_json::from_slice(
-        &email_request.body
-    ).unwrap();
+        let body: serde_json::Value = serde_json::from_slice(
+            &email_request.body
+        ).unwrap();
 
-    let get_link = |s: &str| {
-        let links: Vec<_> = linkify::LinkFinder::new()
-            .links(s)
-            .filter(|l| *l.kind() == linkify::LinkKind::Url)
-            .collect();
-        assert_eq!(links.len(), 1);
-        let raw_link = links[0].as_str().to_owned();
-        let mut confirmation_link = reqwest::Url::parse(&raw_link).unwrap();
-        // Let's make sure we don't call random APIs on the web
-        assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
-        confirmation_link.set_port(Some(self.port)).unwrap();
-        confirmation_link
-    };
+        let get_link = |s: &str| {
+            let links: Vec<_> = linkify::LinkFinder::new()
+                .links(s)
+                .filter(|l| *l.kind() == linkify::LinkKind::Url)
+                .collect();
+            assert_eq!(links.len(), 1);
+            let raw_link = links[0].as_str().to_owned();
+            let mut confirmation_link = reqwest::Url::parse(&raw_link).unwrap();
+            // Let's make sure we don't call random APIs on the web
+            assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
+            confirmation_link.set_port(Some(self.port)).unwrap();
+            confirmation_link
+        };
 
-    let html = get_link(&body["HtmlBody"].as_str().unwrap());
-    let plain_text = get_link(&body["TextBody"].as_str().unwrap());
-    ConfirmationLinks {
-        html,
-        plain_text
+        let html = get_link(&body["HtmlBody"].as_str().unwrap());
+        let plain_text = get_link(&body["TextBody"].as_str().unwrap());
+        ConfirmationLinks {
+            html,
+            plain_text
+        }
     }
-   }
+    pub async fn test_user(&self) -> (String, String) {
+        let row = sqlx::query!("SELECT username, password FROM users LIMIT 1")
+            .fetch_one(&self.db_pool)
+            .await
+            .expect("Failed to create test users.");
+        (row.username, row.password)
+    }
 }
 
 pub async fn spawn_app() -> TestApp {
@@ -116,12 +124,14 @@ pub async fn spawn_app() -> TestApp {
     let address = format!("http://127.0.0.1:{}", application.port());
     let application_port= application.port();
     tokio::spawn(application.run_until_stopped());
-    TestApp {
+    let test_app = TestApp {
         address, 
         db_pool: get_connection_pool(&configuration.database),
         email_server,
         port: application_port
-    }
+    };
+    add_test_user(&test_app.db_pool).await;
+    test_app
 }
 
 async fn configure_database(config: &DatabaseSettings) -> PgPool {
@@ -143,4 +153,17 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to migrate the database.");
     connection_pool
+}
+
+async fn add_test_user(pool: &PgPool) {
+    sqlx::query!(
+        "INSERT INTO users (user_id, username, password)
+        VALUES ($1, $2, $3)",
+        Uuid::new_v4(),
+        Uuid::new_v4().to_string(),
+        Uuid::new_v4().to_string(),
+    )
+    .execute(pool)
+    .await
+    .expect("Failed to create test users.");
 }
