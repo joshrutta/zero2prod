@@ -1,13 +1,14 @@
 use std::net::TcpListener;
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpServer, cookie::Key};
 use actix_web::dev::Server;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tracing_actix_web::TracingLogger;
 use crate::routes::{health_check, subscribe, confirm, publish_newsletter, home, login_form, login};
 use crate::email_client::EmailClient;
 use crate::configuration::{DatabaseSettings, Settings};
+use actix_web_flash_messages::{storage::CookieMessageStore, FlashMessagesFramework};
 
 pub struct Application {
     port: u16,
@@ -68,9 +69,14 @@ pub fn run(
     let pg_pool = web::Data::new(pg_pool);
     let email_client = web::Data::new(email_client);
     let base_url = web::Data::new(ApplicationBaseUrl(base_url));
+    let message_store = CookieMessageStore::builder(
+        Key::from(hmac_secret.expose_secret().as_bytes())
+    ).build();
+    let message_framework = FlashMessagesFramework::builder(message_store).build();
     let server = HttpServer::new( move || {
         App::new()
             // Middlewares are added using the `wrap` method on `App`
+            .wrap(message_framework.clone())
             .wrap(TracingLogger::default())
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))

@@ -1,8 +1,12 @@
-use actix_web::{HttpResponse, web};
+use actix_web::cookie::{Cookie, time::Duration};
+use actix_web::{HttpRequest, HttpResponse, web};
 use actix_web::http::header::ContentType;
 use hmac::{Hmac ,Mac};
 use secrecy::ExposeSecret;
+use actix_web_flash_messages::{IncomingFlashMessages, Level};
+use std::fmt::Write;
 
+// use crate::routes::Content;
 use crate::startup::HmacSecret;
 
 #[derive(serde::Deserialize)]
@@ -10,7 +14,6 @@ pub struct QueryParams {
     error: String,
     tag: String
 }
-
 impl QueryParams {
     fn verify(self, secret: &HmacSecret) -> Result<String, anyhow::Error> {
         let tag = hex::decode(self.tag)?;
@@ -30,25 +33,28 @@ impl QueryParams {
 }
 
 pub async fn login_form(
-    query: Option<web::Query<QueryParams>>,
-    secret: web::Data<HmacSecret>
+    flash_messages: IncomingFlashMessages
 ) -> HttpResponse {
-    let error_html = match query {
-        None => "".into(),
-        Some(query) => match query.0.verify(&secret) {
-            Ok(error) => {
-                format!("<p><i>{}</i></p>",htmlescape::encode_minimal(&error))
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error.message = %e,
-                    error.cause_chain = ?e,
-                    "Failed to verify request parameters using HMAC tag"
-                );
-                "".into()
-            }
-        },
-    };
+    let mut error_html: String = String::new();
+    for m in flash_messages.iter().filter(|m| m.level() == Level::Error) {
+        writeln!(error_html, "<p><i>{}</i></p>", m.content()).unwrap();
+    }
+    // let error_html = match query {
+    //     None => "".into(),
+    //     Some(query) => match query.0.verify(&secret) {
+    //         Ok(error) => {
+    //             format!("<p><i>{}</i></p>",htmlescape::encode_minimal(&error))
+    //         }
+    //         Err(e) => {
+    //             tracing::warn!(
+    //                 error.message = %e,
+    //                 error.cause_chain = ?e,
+    //                 "Failed to verify request parameters using HMAC tag"
+    //             );
+    //             "".into()
+    //         }
+    //     },
+    // };
     HttpResponse::Ok()
         .content_type(ContentType::html())
         .body(format!(
@@ -79,5 +85,5 @@ pub async fn login_form(
                     </form>
                 </body>
             </html>"#,
-        ))
+    ))
 }
